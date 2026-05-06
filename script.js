@@ -1,5 +1,9 @@
+const DESIGN_WIDTH = 1920;
+const DESIGN_HEIGHT = 1080;
+
 function resizeGameScreen() {
   const screen = document.getElementById("gameScreen");
+  const content = document.getElementById("gameContent");
 
   const windowRatio = window.innerWidth / window.innerHeight;
   const targetRatio = 16 / 9;
@@ -11,6 +15,29 @@ function resizeGameScreen() {
     screen.style.width = "100vw";
     screen.style.height = "calc(100vw * 9 / 16)";
   }
+
+  if (!content) {
+    return;
+  }
+
+  const screenRect = screen.getBoundingClientRect();
+  const screenWidth = screen.clientWidth || screenRect.width;
+  const screenHeight = screen.clientHeight || screenRect.height;
+
+  if (!screenWidth || !screenHeight) {
+    return;
+  }
+
+  const scale = Math.min(
+    screenWidth / DESIGN_WIDTH,
+    screenHeight / DESIGN_HEIGHT
+  );
+  const left = (screenWidth - DESIGN_WIDTH * scale) / 2;
+  const top = (screenHeight - DESIGN_HEIGHT * scale) / 2;
+
+  content.style.left = `${left}px`;
+  content.style.top = `${top}px`;
+  content.style.transform = `scale(${scale})`;
 }
 
 window.addEventListener("resize", resizeGameScreen);
@@ -109,6 +136,10 @@ function getInitialCreationDraft() {
 
 function getGameScreen() {
   return document.getElementById("gameScreen");
+}
+
+function getGameContent() {
+  return document.getElementById("gameContent");
 }
 
 function getClassById(classId) {
@@ -569,7 +600,7 @@ function render() {
 }
 
 function renderSavesScreen() {
-  const screen = getGameScreen();
+  const screen = getGameContent();
   const saveItems = gameState.saves.length
     ? gameState.saves.map((save) => {
         const isSelected = save.id === gameState.selectedSaveId;
@@ -610,7 +641,7 @@ function renderSavesScreen() {
 }
 
 function renderCreationScreen() {
-  const screen = getGameScreen();
+  const screen = getGameContent();
   const selectedClass = getClassById(creationDraft.classId);
   const remainingPoints = getRemainingCreationPoints();
   const classOptions = CLASSES.map((characterClass) => `
@@ -696,7 +727,7 @@ function renderCreationScreen() {
 }
 
 function renderMainMenu() {
-  const screen = getGameScreen();
+  const screen = getGameContent();
   const character = getSelectedCharacter();
 
   screen.innerHTML = `
@@ -1008,10 +1039,11 @@ function handleChange(event) {
 function init() {
   resizeGameScreen();
   loadSaves();
-  getGameScreen().addEventListener("click", handleClick);
-  getGameScreen().addEventListener("input", handleInput);
-  getGameScreen().addEventListener("change", handleChange);
+  getGameContent().addEventListener("click", handleClick);
+  getGameContent().addEventListener("input", handleInput);
+  getGameContent().addEventListener("change", handleChange);
   render();
+  resizeGameScreen();
 }
 
 init();
