@@ -790,10 +790,35 @@ function renderCharacterPanel(character) {
       <div class="separator"></div>
       <div class="character-emoji">${character.emoji}</div>
       <div class="separator"></div>
+      ${renderCharacterStats(character)}
+      <div class="separator"></div>
       ${renderBar("EXP", character.exp, character.expToNext)}
       <div class="separator"></div>
       <div class="gold-line">Or : ${gameState.gold}</div>
     </section>
+  `;
+}
+
+function renderCharacterStats(character) {
+  const baseStats = character.baseStats;
+  const derivedStats = character.derivedStats;
+
+  return `
+    <div class="character-stats">
+      <div class="stats-group">
+        <div class="stat-line stat-for"><span>FOR</span><strong>${baseStats.force}</strong></div>
+        <div class="stat-line stat-rap"><span>RAP</span><strong>${baseStats.speed}</strong></div>
+        <div class="stat-line stat-con"><span>CON</span><strong>${baseStats.constitution}</strong></div>
+        <div class="stat-line stat-mana"><span>MANA</span><strong>${baseStats.mana}</strong></div>
+      </div>
+      <div class="stats-group">
+        <div class="stat-line stat-pp"><span>PP</span><strong>${derivedStats.physicalPower}</strong></div>
+        <div class="stat-line stat-crit"><span>CRIT</span><strong>${derivedStats.crit}%</strong></div>
+        <div class="stat-line stat-esq"><span>ESQ</span><strong>${derivedStats.dodge}%</strong></div>
+        <div class="stat-line stat-def"><span>DEF</span><strong>${derivedStats.defense}</strong></div>
+        <div class="stat-line stat-pm"><span>PM</span><strong>${derivedStats.magicPower}</strong></div>
+      </div>
+    </div>
   `;
 }
 

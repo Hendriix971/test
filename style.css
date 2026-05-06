@@ -521,12 +521,86 @@ select {
 }
 
 .character-emoji {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 2.5em;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 3.2em;
+}
+
+.character-stats {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0.35em 0.45em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.25em;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.82em;
+}
+
+.stats-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+}
+
+.stats-group + .stats-group {
+  padding-top: 0.35em;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 0.5em;
+  line-height: 1.08;
+}
+
+.stat-line span {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.stat-line strong {
+  color: #fff8f8;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-for span,
+.stat-crit span {
+  color: #d9b85f;
+}
+
+.stat-rap span {
+  color: #f3eded;
+}
+
+.stat-con span,
+.stat-pp span {
+  color: #c97852;
+}
+
+.stat-mana span {
+  color: #e2cf83;
+}
+
+.stat-esq span {
+  color: #80bd85;
+}
+
+.stat-def span {
+  color: #80a7cf;
+}
+
+.stat-pm span {
+  color: #aa8fd6;
 }
 
 .gold-line {
