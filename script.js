@@ -782,19 +782,22 @@ function renderCharacterPanel(character) {
   return `
     <section class="panel character-panel">
       <h2 class="panel-title">Personnage</h2>
-      <div class="character-name">${escapeHtml(character.pseudo)} (Niv.${character.level})</div>
-      <div class="separator"></div>
-      ${renderBar("PV", character.hp, character.maxHp)}
-      <div class="separator"></div>
-      ${renderBar("Énergie", character.energy, character.maxEnergy)}
-      <div class="separator"></div>
-      <div class="character-emoji">${character.emoji}</div>
-      <div class="separator"></div>
-      ${renderCharacterStats(character)}
-      <div class="separator"></div>
-      ${renderBar("EXP", character.exp, character.expToNext)}
-      <div class="separator"></div>
-      <div class="gold-line">Or : ${gameState.gold}</div>
+      <div class="character-top">
+        <div class="character-name">${escapeHtml(character.pseudo)} (Niv.${character.level})</div>
+        <div class="separator"></div>
+        ${renderBar("PV", character.hp, character.maxHp)}
+        <div class="separator"></div>
+        ${renderBar("Énergie", character.energy, character.maxEnergy)}
+        <div class="separator"></div>
+        <div class="character-emoji">${character.emoji}</div>
+      </div>
+      <div class="character-bottom">
+        ${renderCharacterStats(character)}
+        <div class="separator"></div>
+        ${renderBar("EXP", character.exp, character.expToNext)}
+        <div class="separator"></div>
+        <div class="gold-line">Or : ${gameState.gold}</div>
+      </div>
     </section>
   `;
 }
