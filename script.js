@@ -682,9 +682,17 @@ function renderCreationScreen() {
     </section>
   `;
 
-  const input = document.getElementById("pseudoInput");
-  input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
+  const blurActiveElement = () => {
+    if (document.activeElement && typeof document.activeElement.blur === "function") {
+      document.activeElement.blur();
+    }
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(blurActiveElement);
+  } else {
+    blurActiveElement();
+  }
 }
 
 function renderMainMenu() {
