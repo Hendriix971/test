@@ -157,6 +157,7 @@ select {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  position: relative;
 }
 
 .game-title {
@@ -748,5 +749,338 @@ select {
 .inventory-actions button {
   padding-left: 0.25em;
   padding-right: 0.25em;
+}
+
+.popup-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(1px);
+}
+
+.tavern-popup {
+  width: 32em;
+  max-height: calc(100% - 3em);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  padding: 1.25em;
+  border: 1px solid #b66a78;
+  border-radius: 0.45em;
+  background: #251d21;
+  color: #f4eeee;
+  box-shadow: 0 1em 3em rgba(0, 0, 0, 0.55);
+}
+
+.tavern-state-popup,
+.tavern-message-popup {
+  width: 24em;
+}
+
+.tavern-state-popup .popup-intro strong {
+  color: #fff8f8;
+  font-size: 1.2em;
+}
+
+.popup-title {
+  text-align: center;
+  color: #fff8f8;
+  font-size: 1.55em;
+  line-height: 1;
+}
+
+.popup-separator {
+  position: relative;
+  height: 1px;
+  margin: 0 4em;
+  background: linear-gradient(90deg, transparent, rgba(192, 122, 136, 0.65), transparent);
+}
+
+.popup-separator::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.38em;
+  height: 0.38em;
+  border: 1px solid #c07a88;
+  background: #251d21;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.popup-intro {
+  text-align: center;
+  color: #f2ecec;
+  font-size: 0.92em;
+  line-height: 1.45;
+}
+
+.tavern-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65em;
+}
+
+.tavern-action-card {
+  width: 100%;
+  min-height: 5.1em;
+  display: grid;
+  grid-template-columns: 4.2em 1fr;
+  align-items: center;
+  gap: 1em;
+  padding: 0.75em;
+  border-color: #8b5966;
+  border-radius: 0.35em;
+  background: #32252a;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.tavern-action-card:hover {
+  background: #3d2b31;
+  border-color: #b66a78;
+}
+
+.tavern-action-card:disabled {
+  opacity: 0.75;
+}
+
+.tavern-action-icon {
+  width: 3.4em;
+  height: 3.4em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(192, 122, 136, 0.42);
+  border-radius: 0.35em;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 1.3em;
+  text-shadow: 0 0 0.5em rgba(255, 210, 218, 0.35);
+}
+
+.tavern-action-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28em;
+  color: #f4eeee;
+}
+
+.tavern-action-copy strong {
+  color: #fff8f8;
+  font-size: 1.08em;
+}
+
+.tavern-action-copy span {
+  color: #f2ecec;
+  font-size: 0.82em;
+}
+
+.tavern-action-copy b {
+  color: #dc8f9c;
+}
+
+.tavern-close-button {
+  width: 100%;
+  min-height: 2.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75em;
+  border-color: #a96472;
+  border-radius: 0.35em;
+  background: #332329;
+  font-size: 1.02em;
+}
+
+.tavern-close-button:hover {
+  background: #432d34;
+}
+
+.merchant-popup {
+  position: relative;
+  width: 48em;
+  height: 34em;
+  max-width: calc(100% - 3em);
+  max-height: calc(100% - 3em);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  padding: 1.1em;
+  border: 1px solid #b66a78;
+  border-radius: 0.45em;
+  background: #251d21;
+  color: #f4eeee;
+  box-shadow: 0 1em 3em rgba(0, 0, 0, 0.55);
+}
+
+.merchant-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75em;
+}
+
+.merchant-header .popup-title {
+  grid-column: 2;
+}
+
+.merchant-close-button {
+  grid-column: 3;
+  justify-self: end;
+  min-width: 5.5em;
+}
+
+.merchant-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.merchant-tabs {
+  display: flex;
+  gap: 0.4em;
+}
+
+.merchant-tab {
+  min-width: 6.5em;
+}
+
+.merchant-tab.is-active {
+  border-color: #c07a88;
+  background: #4d3138;
+  color: #fff8f8;
+}
+
+.merchant-gold {
+  color: #d9b85f;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.merchant-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: scroll;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  padding: 0.4em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.35em;
+  background: rgba(0, 0, 0, 0.14);
+  scrollbar-color: rgba(192, 122, 136, 0.6) #181516;
+}
+
+.merchant-list::-webkit-scrollbar {
+  width: 0.45em;
+}
+
+.merchant-list::-webkit-scrollbar-track {
+  background: #181516;
+}
+
+.merchant-list::-webkit-scrollbar-thumb {
+  background: rgba(192, 122, 136, 0.6);
+  border-radius: 999px;
+}
+
+.merchant-category-title {
+  margin-top: 0.35em;
+  color: #dc8f9c;
+  font-size: 0.82em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.merchant-category-title:first-child {
+  margin-top: 0;
+}
+
+.merchant-item {
+  display: grid;
+  grid-template-columns: 3em minmax(0, 1fr) 6.5em;
+  align-items: center;
+  gap: 0.7em;
+  padding: 0.6em;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.35em;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.merchant-item-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35em;
+}
+
+.merchant-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16em;
+}
+
+.merchant-item-name {
+  color: #fff8f8;
+  font-weight: 700;
+}
+
+.merchant-item-detail {
+  color: #d6c8ca;
+  font-size: 0.8em;
+}
+
+.merchant-item-materials {
+  color: #cfa3ab;
+  font-size: 0.78em;
+}
+
+.merchant-item-price {
+  color: #d9b85f;
+  font-size: 0.82em;
+  font-weight: 700;
+}
+
+.merchant-item-action {
+  width: 100%;
+}
+
+.merchant-item-action.is-unavailable {
+  opacity: 0.55;
+  filter: saturate(0.75);
+}
+
+.merchant-message-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.merchant-message {
+  width: 27em;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85em;
+  padding: 1em;
+  border: 1px solid #b66a78;
+  border-radius: 0.45em;
+  background: #251d21;
+  color: #f4eeee;
+  box-shadow: 0 1em 2em rgba(0, 0, 0, 0.45);
 }
 

@@ -116,10 +116,17 @@ const gameState = {
   gold: 0,
   logs: [],
   selectedInventoryItemId: null,
-  selectedEquipmentSlot: null
+  selectedEquipmentSlot: null,
+  activePopup: null,
+  merchantMode: "buy",
+  merchantMessage: null,
+  tavernMode: "menu",
+  tavernMessage: null,
+  restRemainingSeconds: 60
 };
 
 let creationDraft = getInitialCreationDraft();
+let tavernRestTimerId = null;
 
 function getInitialCreationDraft() {
   return {
@@ -175,6 +182,57 @@ function calculateDerivedStats(baseStats, level) {
   };
 }
 
+function getEmptyFinalStats() {
+  return {
+    physicalPower: 0,
+    defense: 0,
+    magicPower: 0,
+    crit: 0,
+    dodge: 0,
+    maxHp: 0,
+    maxEnergy: 0
+  };
+}
+
+function getEquipmentBonuses(character) {
+  const bonuses = getEmptyFinalStats();
+  const equippedItems = [
+    character.equipment?.arme,
+    character.equipment?.armure
+  ].filter(Boolean);
+
+  equippedItems.forEach((item) => {
+    Object.entries(item.stats || {}).forEach(([statKey, value]) => {
+      if (statKey in bonuses) {
+        bonuses[statKey] += value;
+      }
+    });
+  });
+
+  return bonuses;
+}
+
+function getFinalCharacterStats(character) {
+  const derivedStats = character.derivedStats || getEmptyFinalStats();
+  const equipmentBonuses = getEquipmentBonuses(character);
+
+  return {
+    physicalPower: derivedStats.physicalPower + equipmentBonuses.physicalPower,
+    defense: derivedStats.defense + equipmentBonuses.defense,
+    magicPower: derivedStats.magicPower + equipmentBonuses.magicPower,
+    crit: Math.min(50, derivedStats.crit + equipmentBonuses.crit),
+    dodge: Math.min(35, derivedStats.dodge + equipmentBonuses.dodge),
+    maxHp: derivedStats.maxHp + equipmentBonuses.maxHp,
+    maxEnergy: derivedStats.maxEnergy + equipmentBonuses.maxEnergy
+  };
+}
+
+function clampCharacterCurrentVitals(character) {
+  const finalStats = getFinalCharacterStats(character);
+  character.hp = Math.min(character.hp, finalStats.maxHp);
+  character.energy = Math.min(character.energy, finalStats.maxEnergy);
+}
+
 function createCharacter(pseudo, classId, baseStats) {
   const characterClass = getClassById(classId);
   const level = 1;
@@ -201,61 +259,224 @@ function createCharacter(pseudo, classId, baseStats) {
   };
 }
 
-function createPrototypeInventory() {
-  return [
+const ITEM_DATABASE = {
+  consumables: [
     {
-      id: createId("item"),
-      name: "Potion",
+      id: "consumable_potion_de_vie",
+      name: "Potion de vie",
       emoji: "🧪",
       type: "consumable",
-      level: 1,
-      effectText: "Restaure 20 PV",
-      description: "Objet de soin prototype."
+      effectType: "restoreHpPercent",
+      effectValue: 30,
+      effectText: "Restaure 30% des PV max",
+      buyPrice: 30,
+      sellPrice: 15,
+      description: "Potion simple qui referme les blessures selon les PV max."
     },
     {
-      id: createId("item"),
-      name: "Épée",
+      id: "consumable_potion_energie",
+      name: "Potion d’énergie",
+      emoji: "🔵",
+      type: "consumable",
+      effectType: "restoreEnergyPercent",
+      effectValue: 30,
+      effectText: "Restaure 30% des PE max",
+      buyPrice: 30,
+      sellPrice: 15,
+      description: "Potion simple qui rend de l’énergie selon les PE max."
+    }
+  ],
+  weapons: [
+    {
+      id: "weapon_dague_en_os_1",
+      name: "Dague en os",
+      emoji: "🗡️",
+      type: "weapon",
+      level: 1,
+      stats: { physicalPower: 8, crit: 3 },
+      statsText: "+8 PP, +3% CRIT",
+      materials: [
+        { name: "Os de monstre", quantity: 2 },
+        { name: "Croc de loup", quantity: 1 }
+      ],
+      normalPrice: 80,
+      reducedPrice: 40,
+      sellPrice: 20,
+      description: "Une lame légère taillée dans un os durci."
+    },
+    {
+      id: "weapon_epee_de_ferraille_1",
+      name: "Épée de ferraille",
       emoji: "⚔️",
       type: "weapon",
       level: 1,
-      statsText: "+5 PP, +2 DEF",
-      description: "Arme simple pour le prototype."
+      stats: { physicalPower: 10, defense: 5 },
+      statsText: "+10 PP, +5 DEF",
+      materials: [
+        { name: "Morceau de ferraille", quantity: 3 },
+        { name: "Bois solide", quantity: 1 }
+      ],
+      normalPrice: 90,
+      reducedPrice: 45,
+      sellPrice: 22,
+      description: "Une épée grossière, mais assez solide pour survivre."
     },
     {
-      id: createId("item"),
+      id: "weapon_bouclier_en_bois_1",
+      name: "Bouclier en bois",
+      emoji: "🛡️",
+      type: "weapon",
+      level: 1,
+      stats: { defense: 8, maxHp: 25 },
+      statsText: "+8 DEF, +25 PV max",
+      materials: [
+        { name: "Bois solide", quantity: 3 },
+        { name: "Peau de sanglier", quantity: 1 }
+      ],
+      normalPrice: 90,
+      reducedPrice: 45,
+      sellPrice: 22,
+      description: "Un bouclier simple pour encaisser les premiers coups."
+    },
+    {
+      id: "weapon_baton_de_bois_1",
+      name: "Bâton de bois",
+      emoji: "🪄",
+      type: "weapon",
+      level: 1,
+      stats: { magicPower: 10, maxEnergy: 25 },
+      statsText: "+10 PM, +25 PE max",
+      materials: [
+        { name: "Bois solide", quantity: 2 },
+        { name: "Noyau de slime", quantity: 1 }
+      ],
+      normalPrice: 90,
+      reducedPrice: 45,
+      sellPrice: 22,
+      description: "Un bâton conducteur pour les premiers sorts."
+    },
+    {
+      id: "weapon_grimoire_use_1",
+      name: "Grimoire usé",
+      emoji: "📖",
+      type: "weapon",
+      level: 1,
+      stats: { magicPower: 10, crit: 3 },
+      statsText: "+10 PM, +3% CRIT",
+      materials: [
+        { name: "Peau de sanglier", quantity: 1 },
+        { name: "Venin d’araignée", quantity: 1 },
+        { name: "Soie d’araignée", quantity: 1 }
+      ],
+      normalPrice: 100,
+      reducedPrice: 50,
+      sellPrice: 25,
+      description: "Un vieux grimoire encore chargé d’une magie instable."
+    }
+  ],
+  armors: [
+    {
+      id: "armor_armure_legere_1",
       name: "Armure légère",
+      emoji: "🦺",
+      type: "armor",
+      level: 1,
+      stats: { defense: 6, dodge: 3 },
+      statsText: "+6 DEF, +3% ESQ",
+      materials: [
+        { name: "Peau de sanglier", quantity: 2 },
+        { name: "Fourrure de loup", quantity: 1 }
+      ],
+      normalPrice: 80,
+      reducedPrice: 40,
+      sellPrice: 20,
+      description: "Une protection souple qui laisse de la mobilité."
+    },
+    {
+      id: "armor_armure_lourde_1",
+      name: "Armure lourde",
       emoji: "🛡️",
       type: "armor",
       level: 1,
-      statsText: "+6 DEF, +2 PV",
-      description: "Armure simple pour le prototype."
+      stats: { defense: 10, maxHp: 30 },
+      statsText: "+10 DEF, +30 PV max",
+      materials: [
+        { name: "Morceau de ferraille", quantity: 3 },
+        { name: "Défense de sanglier", quantity: 1 }
+      ],
+      normalPrice: 100,
+      reducedPrice: 50,
+      sellPrice: 25,
+      description: "Une armure rudimentaire, lourde mais rassurante."
     },
     {
-      id: createId("item"),
-      name: "Herbe médicinale",
-      emoji: "🌿",
-      type: "consumable",
+      id: "armor_robe_magique_1",
+      name: "Robe magique",
+      emoji: "🧥",
+      type: "armor",
       level: 1,
-      effectText: "Restaure 10 PV",
-      description: "Consommable prototype."
+      stats: { defense: 6, maxEnergy: 30 },
+      statsText: "+6 DEF, +30 PE max",
+      materials: [
+        { name: "Soie d’araignée", quantity: 2 },
+        { name: "Noyau de slime", quantity: 1 }
+      ],
+      normalPrice: 100,
+      reducedPrice: 50,
+      sellPrice: 25,
+      description: "Une robe légère cousue avec des fibres réactives à la mana."
     },
     {
-      id: createId("item"),
-      name: "Griffe de loup",
-      emoji: "🐺",
-      type: "resource",
-      sellPrice: 5,
-      description: "Ressource destinée à la vente."
-    },
-    {
-      id: createId("item"),
-      name: "Os ancien",
-      emoji: "🦴",
-      type: "resource",
-      sellPrice: 12,
-      description: "Ressource destinée à la vente."
+      id: "armor_tunique_1",
+      name: "Tunique",
+      emoji: "👕",
+      type: "armor",
+      level: 1,
+      stats: { maxHp: 25, maxEnergy: 25 },
+      statsText: "+25 PV max, +25 PE max",
+      materials: [
+        { name: "Fourrure de loup", quantity: 2 },
+        { name: "Peau de sanglier", quantity: 1 }
+      ],
+      normalPrice: 90,
+      reducedPrice: 45,
+      sellPrice: 22,
+      description: "Une tunique de voyage renforcée avec des peaux épaisses."
     }
-  ];
+  ],
+  resources: [
+    { id: "resource_gelee_de_slime", name: "Gelée de slime", emoji: "🟢", type: "resource", sellPrice: 2, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_noyau_de_slime", name: "Noyau de slime", emoji: "🟢", type: "resource", sellPrice: 5, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_griffe_de_loup", name: "Griffe de loup", emoji: "🐺", type: "resource", sellPrice: 3, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_croc_de_loup", name: "Croc de loup", emoji: "🦷", type: "resource", sellPrice: 5, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_fourrure_de_loup", name: "Fourrure de loup", emoji: "🐺", type: "resource", sellPrice: 6, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_peau_de_sanglier", name: "Peau de sanglier", emoji: "🐗", type: "resource", sellPrice: 4, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_defense_de_sanglier", name: "Défense de sanglier", emoji: "🦷", type: "resource", sellPrice: 6, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_morceau_de_ferraille", name: "Morceau de ferraille", emoji: "⚙️", type: "resource", sellPrice: 5, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_os_de_monstre", name: "Os de monstre", emoji: "🦴", type: "resource", sellPrice: 3, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_soie_araignee", name: "Soie d’araignée", emoji: "🕸️", type: "resource", sellPrice: 5, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_venin_araignee", name: "Venin d’araignée", emoji: "🧪", type: "resource", sellPrice: 8, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_ecaille_de_serpent", name: "Écaille de serpent", emoji: "🐍", type: "resource", sellPrice: 5, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_croc_de_serpent", name: "Croc de serpent", emoji: "🦷", type: "resource", sellPrice: 6, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_bois_solide", name: "Bois solide", emoji: "🪵", type: "resource", sellPrice: 4, description: "Ressource de forêt destinée à la vente ou à la fabrication." },
+    { id: "resource_ecorce_ancienne", name: "Écorce ancienne", emoji: "🌳", type: "resource", sellPrice: 8, description: "Ressource de forêt destinée à la vente ou à la fabrication." }
+  ]
+};
+
+function createItemInstance(itemTemplate) {
+  return structuredClone({
+    ...itemTemplate,
+    id: createId(itemTemplate.id)
+  });
+}
+
+function createDebugInventory() {
+  return [
+    ...ITEM_DATABASE.consumables,
+    ...ITEM_DATABASE.weapons,
+    ...ITEM_DATABASE.armors,
+    ...ITEM_DATABASE.resources
+  ].map(createItemInstance);
 }
 
 function loadSaves() {
@@ -343,6 +564,11 @@ function loadSave(saveId) {
   gameState.logs = [...(save.logs || [])];
   gameState.selectedInventoryItemId = null;
   gameState.selectedEquipmentSlot = null;
+  gameState.activePopup = null;
+  gameState.merchantMode = "buy";
+  gameState.tavernMode = "menu";
+  gameState.tavernMessage = null;
+  gameState.restRemainingSeconds = 60;
   setScreen("main");
 }
 
@@ -358,6 +584,11 @@ function startNewGameCreation() {
   ];
   gameState.selectedInventoryItemId = null;
   gameState.selectedEquipmentSlot = null;
+  gameState.activePopup = null;
+  gameState.merchantMode = "buy";
+  gameState.tavernMode = "menu";
+  gameState.tavernMessage = null;
+  gameState.restRemainingSeconds = 60;
   creationDraft = getInitialCreationDraft();
   setScreen("creation");
 }
@@ -439,7 +670,7 @@ function launchAdventure() {
   }
 
   gameState.selectedCharacterId = gameState.team[0].id;
-  gameState.inventory = createPrototypeInventory();
+  gameState.inventory = [];
   gameState.gold = 0;
   gameState.logs = [
     "Bienvenue dans Valeria Rebuild.",
@@ -493,10 +724,18 @@ function selectEquipmentSlot(slot) {
 }
 
 function useSelectedInventoryItem() {
-  const item = gameState.inventory.find((candidate) => candidate.id === gameState.selectedInventoryItemId);
+  const character = getSelectedCharacter();
+  const itemIndex = gameState.inventory.findIndex((candidate) => candidate.id === gameState.selectedInventoryItemId);
+  const item = gameState.inventory[itemIndex];
 
   if (!item) {
     addLog("[Système] Aucun objet sélectionné.");
+    renderAndSave();
+    return;
+  }
+
+  if (!character) {
+    addLog("[Système] Aucun personnage sélectionné.");
     renderAndSave();
     return;
   }
@@ -507,7 +746,29 @@ function useSelectedInventoryItem() {
     return;
   }
 
-  addLog("[Système] Objet utilisé.");
+  const finalStats = getFinalCharacterStats(character);
+
+  if (item.effectType === "restoreHpPercent") {
+    const healAmount = Math.ceil(finalStats.maxHp * item.effectValue / 100);
+    character.hp = Math.min(finalStats.maxHp, character.hp + healAmount);
+    gameState.inventory.splice(itemIndex, 1);
+    gameState.selectedInventoryItemId = null;
+    addLog("[Système] Potion de vie utilisée. PV restaurés.");
+    renderAndSave();
+    return;
+  }
+
+  if (item.effectType === "restoreEnergyPercent") {
+    const energyAmount = Math.ceil(finalStats.maxEnergy * item.effectValue / 100);
+    character.energy = Math.min(finalStats.maxEnergy, character.energy + energyAmount);
+    gameState.inventory.splice(itemIndex, 1);
+    gameState.selectedInventoryItemId = null;
+    addLog("[Système] Potion d’énergie utilisée. Énergie restaurée.");
+    renderAndSave();
+    return;
+  }
+
+  addLog("[Système] Cet objet ne peut pas être utilisé.");
   renderAndSave();
 }
 
@@ -537,6 +798,7 @@ function equipSelectedInventoryItem() {
     gameState.inventory.push(previousItem);
   }
 
+  clampCharacterCurrentVitals(character);
   gameState.selectedInventoryItemId = null;
   addLog(`[Système] ${item.name} équipé sur ${character.pseudo}.`);
   renderAndSave();
@@ -570,14 +832,355 @@ function unequipSelectedItem() {
   const item = character.equipment[slot];
   character.equipment[slot] = null;
   gameState.inventory.push(item);
+  clampCharacterCurrentVitals(character);
   gameState.selectedEquipmentSlot = null;
   addLog(`[Système] ${item.name} déséquipé.`);
   renderAndSave();
 }
 
 function visitPlace(placeName) {
+  if (placeName === "Taverne") {
+    openTavernPopup();
+    return;
+  }
+
+  if (placeName === "Marchand") {
+    openMerchantPopup();
+    return;
+  }
+
   addLog(`[Système] ${placeName} bientôt disponible.`);
   renderAndSave();
+}
+
+function openMerchantPopup() {
+  gameState.activePopup = "merchant";
+  gameState.merchantMode = "buy";
+  gameState.merchantMessage = null;
+  render();
+}
+
+function closeMerchantPopup() {
+  gameState.activePopup = null;
+  gameState.merchantMode = "buy";
+  gameState.merchantMessage = null;
+  render();
+}
+
+function setMerchantMode(mode) {
+  if (mode !== "buy" && mode !== "sell") {
+    return;
+  }
+
+  gameState.merchantMode = mode;
+  gameState.merchantMessage = null;
+  render();
+}
+
+function getMerchantBuyItems() {
+  return [
+    ...ITEM_DATABASE.consumables,
+    ...ITEM_DATABASE.weapons,
+    ...ITEM_DATABASE.armors
+  ];
+}
+
+function getMerchantBuyItemById(itemId) {
+  return getMerchantBuyItems().find((item) => item.id === itemId) || null;
+}
+
+function getInventoryResourceCount(resourceName) {
+  return gameState.inventory.filter((item) => item.type === "resource" && item.name === resourceName).length;
+}
+
+function hasRequiredMaterials(materials = []) {
+  return materials.every((material) => getInventoryResourceCount(material.name) >= material.quantity);
+}
+
+function removeRequiredMaterials(materials = []) {
+  materials.forEach((material) => {
+    let remaining = material.quantity;
+
+    for (let index = gameState.inventory.length - 1; index >= 0 && remaining > 0; index -= 1) {
+      const item = gameState.inventory[index];
+      if (item.type === "resource" && item.name === material.name) {
+        gameState.inventory.splice(index, 1);
+        remaining -= 1;
+      }
+    }
+  });
+}
+
+function buyAtMerchant(itemId) {
+  const itemTemplate = getMerchantBuyItemById(itemId);
+  if (!itemTemplate) {
+    return;
+  }
+
+  const price = getMerchantBuyPrice(itemTemplate);
+  const isEquipment = itemTemplate.type === "weapon" || itemTemplate.type === "armor";
+
+  if (isEquipment && !hasRequiredMaterials(itemTemplate.materials)) {
+    showMerchantMessage(getMissingMaterialsMessage(itemTemplate));
+    return;
+  }
+
+  if (gameState.gold < price) {
+    showMerchantMessage(
+      "Le marchand croise les bras.\n\n“J’aimerais bien vous aider, mais l’or ne pousse pas dans les arbres. Revenez quand votre bourse sera un peu plus lourde.”"
+    );
+    return;
+  }
+
+  gameState.gold -= price;
+
+  if (isEquipment) {
+    removeRequiredMaterials(itemTemplate.materials);
+    gameState.inventory.push(createItemInstance(itemTemplate));
+    addLog(`[Marchand] ${itemTemplate.name} fabriquée.`);
+  } else {
+    gameState.inventory.push(createItemInstance(itemTemplate));
+    addLog(`[Marchand] ${itemTemplate.name} achetée.`);
+  }
+
+  renderAndSavePreservingMerchantScroll();
+}
+
+function getMissingMaterialsMessage(item) {
+  const materialLines = (item.materials || [])
+    .map((material) => `- ${material.name} x${material.quantity}`)
+    .join("\n");
+
+  return `Le marchand se gratte la barbe.\n“Je n’ai plus cet article en stock. Mais rapportez-moi les matériaux nécessaires, et je vous le fabriquerai à prix réduit.”\n\nMatériaux nécessaires :\n${materialLines}`;
+}
+
+function showMerchantMessage(message) {
+  gameState.merchantMessage = message;
+  renderPreservingMerchantScroll();
+}
+
+function closeMerchantMessage() {
+  gameState.merchantMessage = null;
+  renderPreservingMerchantScroll();
+}
+
+function sellAtMerchant(itemId) {
+  const itemIndex = gameState.inventory.findIndex((item) => item.id === itemId);
+  const item = gameState.inventory[itemIndex];
+
+  if (!item) {
+    return;
+  }
+
+  const sellPrice = item.sellPrice || 0;
+  if (sellPrice <= 0) {
+    addLog("[Marchand] Cet objet ne peut pas être vendu.");
+    renderAndSavePreservingMerchantScroll();
+    return;
+  }
+
+  gameState.gold += sellPrice;
+  gameState.inventory.splice(itemIndex, 1);
+
+  if (gameState.selectedInventoryItemId === item.id) {
+    gameState.selectedInventoryItemId = null;
+  }
+
+  addLog(`[Marchand] ${item.name} vendu pour ${sellPrice} Or.`);
+  renderAndSavePreservingMerchantScroll();
+}
+
+function renderAndSavePreservingMerchantScroll() {
+  preserveMerchantScroll(renderAndSave);
+}
+
+function renderPreservingMerchantScroll() {
+  preserveMerchantScroll(render);
+}
+
+function preserveMerchantScroll(renderCallback) {
+  const list = getGameContent().querySelector(".merchant-list");
+  const previousScrollTop = list ? list.scrollTop : 0;
+
+  renderCallback();
+
+  const restoreScroll = () => {
+    const newList = getGameContent().querySelector(".merchant-list");
+    if (newList) {
+      newList.scrollTop = previousScrollTop;
+    }
+  };
+
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(restoreScroll);
+    return;
+  }
+
+  restoreScroll();
+}
+
+function openTavernPopup() {
+  gameState.activePopup = "tavern";
+  if (gameState.tavernMode !== "resting") {
+    gameState.tavernMode = "menu";
+    gameState.tavernMessage = null;
+  }
+  render();
+}
+
+function closeTavernPopup() {
+  if (gameState.tavernMode === "resting") {
+    return;
+  }
+
+  gameState.activePopup = null;
+  gameState.tavernMode = "menu";
+  gameState.tavernMessage = null;
+  render();
+}
+
+function closePopup() {
+  if (gameState.activePopup === "tavern") {
+    closeTavernPopup();
+    return;
+  }
+
+  if (gameState.activePopup === "merchant") {
+    closeMerchantPopup();
+    return;
+  }
+
+  gameState.activePopup = null;
+  render();
+}
+
+function restoreTeamHp() {
+  gameState.team.forEach((character) => {
+    character.hp = getFinalCharacterStats(character).maxHp;
+  });
+}
+
+function restoreTeamEnergy() {
+  gameState.team.forEach((character) => {
+    character.energy = getFinalCharacterStats(character).maxEnergy;
+  });
+}
+
+function restoreTeamFull() {
+  restoreTeamHp();
+  restoreTeamEnergy();
+}
+
+function saveExistingGame() {
+  if (gameState.currentSaveId) {
+    saveCurrentGame();
+  }
+}
+
+function clearTavernRestTimer() {
+  if (tavernRestTimerId) {
+    clearInterval(tavernRestTimerId);
+    tavernRestTimerId = null;
+  }
+}
+
+function formatRestTime(totalSeconds) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function startTavernRest() {
+  if (gameState.tavernMode === "resting") {
+    return;
+  }
+
+  const restEndTime = Date.now() + 60000;
+  gameState.tavernMode = "resting";
+  gameState.tavernMessage = null;
+  gameState.restRemainingSeconds = 60;
+  render();
+
+  clearTavernRestTimer();
+
+  tavernRestTimerId = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((restEndTime - Date.now()) / 1000));
+    gameState.restRemainingSeconds = remaining;
+
+    if (remaining > 0) {
+      render();
+      return;
+    }
+
+    completeTavernRest();
+  }, 1000);
+}
+
+function restAtTavern() {
+  startTavernRest();
+}
+
+function cancelTavernRest() {
+  if (gameState.tavernMode !== "resting") {
+    return;
+  }
+
+  clearTavernRestTimer();
+  gameState.tavernMode = "menu";
+  gameState.restRemainingSeconds = 60;
+  render();
+}
+
+function completeTavernRest() {
+  clearTavernRestTimer();
+  gameState.restRemainingSeconds = 0;
+  restoreTeamFull();
+  addLog("[Taverne] Toute l’équipe s’est reposée. PV et énergie restaurés.");
+  showTavernMessage("La nuit fut courte, mais réparatrice. Vous vous sentez prêt à reprendre la route.");
+  saveExistingGame();
+  gameState.restRemainingSeconds = 60;
+}
+
+function showTavernMessage(text) {
+  gameState.tavernMode = "message";
+  gameState.tavernMessage = text;
+  render();
+}
+
+function closeTavernMessage() {
+  gameState.tavernMode = "menu";
+  gameState.tavernMessage = null;
+  render();
+}
+
+function drinkAtTavern() {
+  if (gameState.gold < 20) {
+    addLog("[Taverne] Pas assez d’or pour boire un verre.");
+    showTavernMessage("Pas d’or, pas de chope. Même les héros payent leur tournée.");
+    saveExistingGame();
+    return;
+  }
+
+  gameState.gold -= 20;
+  restoreTeamEnergy();
+  addLog("[Taverne] L’équipe boit un verre. Énergie restaurée.");
+  showTavernMessage("Moe vous sert une chope bien fraîche.\nVotre énergie est restaurée.");
+  saveExistingGame();
+}
+
+function eatAtTavern() {
+  if (gameState.gold < 30) {
+    addLog("[Taverne] Pas assez d’or pour manger un repas.");
+    showTavernMessage("Hé l’ami, ici on ne mange pas à l’œil. Reviens quand tu pourras me payer.");
+    saveExistingGame();
+    return;
+  }
+
+  gameState.gold -= 30;
+  restoreTeamHp();
+  addLog("[Taverne] L’équipe mange un repas. PV restaurés.");
+  showTavernMessage("Moe vous sert un repas chaud et réconfortant.\nVos PV sont restaurés.");
+  saveExistingGame();
 }
 
 function renderAndSave() {
@@ -741,6 +1344,7 @@ function renderMainMenu() {
         ${renderEquipmentPanel(character)}
         ${renderInventoryPanel()}
       </div>
+      ${renderActivePopup()}
     </section>
   `;
 
@@ -748,6 +1352,245 @@ function renderMainMenu() {
   if (logList) {
     logList.scrollTop = logList.scrollHeight;
   }
+}
+
+function renderActivePopup() {
+  if (gameState.activePopup === "tavern") {
+    return renderTavernPopup();
+  }
+
+  if (gameState.activePopup === "merchant") {
+    return renderMerchantPopup();
+  }
+
+  return "";
+}
+
+function renderMerchantPopup() {
+  return `
+    <div class="popup-overlay" role="dialog" aria-modal="true" aria-labelledby="merchantTitle">
+      <div class="merchant-popup">
+        <div class="merchant-header">
+          <h2 class="popup-title" id="merchantTitle">Marchand 💰</h2>
+          <button type="button" class="merchant-close-button" data-action="close-popup">Quitter</button>
+        </div>
+        <div class="popup-separator"></div>
+        <div class="merchant-toolbar">
+          <div class="merchant-tabs">
+            <button type="button" class="merchant-tab ${gameState.merchantMode === "buy" ? "is-active" : ""}" data-action="merchant-mode" data-mode="buy">Acheter</button>
+            <button type="button" class="merchant-tab ${gameState.merchantMode === "sell" ? "is-active" : ""}" data-action="merchant-mode" data-mode="sell">Vendre</button>
+          </div>
+          <div class="merchant-gold">${gameState.gold} Or</div>
+        </div>
+        ${gameState.merchantMode === "buy" ? renderMerchantBuyList() : renderMerchantSellList()}
+        ${gameState.merchantMessage ? renderMerchantMessage() : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderMerchantMessage() {
+  return `
+    <div class="merchant-message-overlay">
+      <div class="merchant-message">
+        <h3 class="popup-title">Marchand 💰</h3>
+        <div class="popup-separator"></div>
+        <p class="popup-intro">${formatTavernMessage(gameState.merchantMessage)}</p>
+        <button type="button" class="tavern-close-button" data-action="merchant-close-message">
+          <strong>OK</strong>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMerchantBuyList() {
+  return `
+    <div class="merchant-list">
+      ${renderMerchantCategory("Consommables", ITEM_DATABASE.consumables, "buy")}
+      ${renderMerchantCategory("Armes", ITEM_DATABASE.weapons, "buy")}
+      ${renderMerchantCategory("Armures", ITEM_DATABASE.armors, "buy")}
+    </div>
+  `;
+}
+
+function renderMerchantSellList() {
+  if (!gameState.inventory.length) {
+    return `
+      <div class="merchant-list">
+        <div class="empty-message">Inventaire vide.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="merchant-list">
+      ${gameState.inventory.map((item) => renderMerchantItemRow(item, "sell")).join("")}
+    </div>
+  `;
+}
+
+function renderMerchantCategory(title, items, mode) {
+  return `
+    <div class="merchant-category-title">${title}</div>
+    ${items.map((item) => renderMerchantItemRow(item, mode)).join("")}
+  `;
+}
+
+function renderMerchantItemRow(item, mode) {
+  const priceLabel = mode === "buy" ? "Prix" : "Prix de vente";
+  const price = mode === "buy" ? getMerchantBuyPrice(item) : getMerchantSellPrice(item);
+  const actionLabel = mode === "buy" ? "Acheter" : "Vendre";
+  const action = mode === "buy" ? "merchant-buy" : "merchant-sell";
+  const detail = getMerchantItemDetail(item, mode);
+  const materials = mode === "buy" ? formatMaterials(item) : "";
+  const unavailableClass = mode === "buy" && !canBuyMerchantItem(item) ? " is-unavailable" : "";
+
+  return `
+    <div class="merchant-item">
+      <div class="merchant-item-emoji">${item.emoji}</div>
+      <div class="merchant-item-main">
+        <div class="merchant-item-name">${formatItemTitle(item)}</div>
+        ${detail ? `<div class="merchant-item-detail">${detail}</div>` : ""}
+        ${materials ? `<div class="merchant-item-materials">${materials}</div>` : ""}
+        <div class="merchant-item-price">${priceLabel} : ${price} Or</div>
+      </div>
+      <button type="button" class="merchant-item-action${unavailableClass}" data-action="${action}" data-item-id="${item.id}">${actionLabel}</button>
+    </div>
+  `;
+}
+
+function getMerchantItemDetail(item, mode) {
+  if (mode === "sell" && item.type === "resource") {
+    return "";
+  }
+
+  return formatItemDetail(item);
+}
+
+function getMerchantBuyPrice(item) {
+  if (item.type === "weapon" || item.type === "armor") {
+    return item.reducedPrice || 0;
+  }
+
+  return item.buyPrice || 30;
+}
+
+function getMerchantSellPrice(item) {
+  return item.sellPrice || 0;
+}
+
+function canBuyMerchantItem(item) {
+  const price = getMerchantBuyPrice(item);
+  if (gameState.gold < price) {
+    return false;
+  }
+
+  if (item.type === "weapon" || item.type === "armor") {
+    return hasRequiredMaterials(item.materials);
+  }
+
+  return true;
+}
+
+function formatMaterials(item) {
+  if (!item.materials?.length) {
+    return "";
+  }
+
+  const materials = item.materials.map((material) => `${material.name} x${material.quantity}`).join(", ");
+  return `Matériaux : ${materials}`;
+}
+
+function renderTavernPopup() {
+  if (gameState.tavernMode === "resting") {
+    return renderTavernRestPopup();
+  }
+
+  if (gameState.tavernMode === "message") {
+    return renderTavernMessagePopup();
+  }
+
+  return `
+    <div class="popup-overlay" role="dialog" aria-modal="true" aria-labelledby="tavernTitle">
+      <div class="tavern-popup">
+        <h2 class="popup-title" id="tavernTitle">Taverne 🍻</h2>
+        <div class="popup-separator"></div>
+        <p class="popup-intro">
+          Bienvenue à la taverne de Moe.<br>
+          Qu’est-ce qui vous ferait plaisir ?
+        </p>
+        <div class="tavern-actions">
+          <button type="button" class="tavern-action-card" data-action="tavern-rest">
+            <span class="tavern-action-icon">🛏️</span>
+            <span class="tavern-action-copy">
+              <strong>Se reposer</strong>
+              <span><b>Durée :</b> 1 min</span>
+              <span>Régénère tous les PV et toute l’énergie</span>
+            </span>
+          </button>
+          <button type="button" class="tavern-action-card" data-action="tavern-drink">
+            <span class="tavern-action-icon">🍺</span>
+            <span class="tavern-action-copy">
+              <strong>Boire un verre</strong>
+              <span><b>Coût :</b> 20 pièces</span>
+              <span>Régénère toute l’énergie</span>
+            </span>
+          </button>
+          <button type="button" class="tavern-action-card" data-action="tavern-eat">
+            <span class="tavern-action-icon">🍲</span>
+            <span class="tavern-action-copy">
+              <strong>Manger un repas</strong>
+              <span><b>Coût :</b> 30 pièces</span>
+              <span>Régénère tous les PV</span>
+            </span>
+          </button>
+        </div>
+        <button type="button" class="tavern-close-button" data-action="close-popup">
+          <span>🚪</span>
+          <strong>Quitter</strong>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderTavernRestPopup() {
+  return `
+    <div class="popup-overlay" role="dialog" aria-modal="true" aria-labelledby="tavernRestTitle">
+      <div class="tavern-popup tavern-state-popup">
+        <h2 class="popup-title" id="tavernRestTitle">Taverne 🍻</h2>
+        <div class="popup-separator"></div>
+        <p class="popup-intro">
+          Vous vous reposez.<br>
+          Temps d’attente : <strong>${formatRestTime(gameState.restRemainingSeconds)}</strong>
+        </p>
+        <button type="button" class="tavern-close-button" data-action="tavern-cancel-rest">
+          <span>🚪</span>
+          <strong>Quitter</strong>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderTavernMessagePopup() {
+  return `
+    <div class="popup-overlay" role="dialog" aria-modal="true" aria-labelledby="tavernMessageTitle">
+      <div class="tavern-popup tavern-message-popup">
+        <h2 class="popup-title" id="tavernMessageTitle">Taverne 🍻</h2>
+        <div class="popup-separator"></div>
+        <p class="popup-intro">${formatTavernMessage(gameState.tavernMessage || "")}</p>
+        <button type="button" class="tavern-close-button" data-action="tavern-close-message">
+          <strong>OK</strong>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function formatTavernMessage(message) {
+  return escapeHtml(message).replaceAll("\n", "<br>");
 }
 
 function renderTeamPanel() {
@@ -779,15 +1622,17 @@ function renderCharacterPanel(character) {
     `;
   }
 
+  const finalStats = getFinalCharacterStats(character);
+
   return `
     <section class="panel character-panel">
       <h2 class="panel-title">Personnage</h2>
       <div class="character-top">
         <div class="character-name">${escapeHtml(character.pseudo)} (Niv.${character.level})</div>
         <div class="separator"></div>
-        ${renderBar("PV", character.hp, character.maxHp)}
+        ${renderBar("PV", character.hp, finalStats.maxHp)}
         <div class="separator"></div>
-        ${renderBar("Énergie", character.energy, character.maxEnergy)}
+        ${renderBar("Énergie", character.energy, finalStats.maxEnergy)}
         <div class="separator"></div>
         <div class="character-emoji">${character.emoji}</div>
       </div>
@@ -804,7 +1649,7 @@ function renderCharacterPanel(character) {
 
 function renderCharacterStats(character) {
   const baseStats = character.baseStats;
-  const derivedStats = character.derivedStats;
+  const finalStats = getFinalCharacterStats(character);
 
   return `
     <div class="character-stats">
@@ -815,11 +1660,11 @@ function renderCharacterStats(character) {
         <div class="stat-line stat-mana"><span>MANA</span><strong>${baseStats.mana}</strong></div>
       </div>
       <div class="stats-group">
-        <div class="stat-line stat-pp"><span>PP</span><strong>${derivedStats.physicalPower}</strong></div>
-        <div class="stat-line stat-crit"><span>CRIT</span><strong>${derivedStats.crit}%</strong></div>
-        <div class="stat-line stat-esq"><span>ESQ</span><strong>${derivedStats.dodge}%</strong></div>
-        <div class="stat-line stat-def"><span>DEF</span><strong>${derivedStats.defense}</strong></div>
-        <div class="stat-line stat-pm"><span>PM</span><strong>${derivedStats.magicPower}</strong></div>
+        <div class="stat-line stat-pp"><span>PP</span><strong>${finalStats.physicalPower}</strong></div>
+        <div class="stat-line stat-crit"><span>CRIT</span><strong>${finalStats.crit}%</strong></div>
+        <div class="stat-line stat-esq"><span>ESQ</span><strong>${finalStats.dodge}%</strong></div>
+        <div class="stat-line stat-def"><span>DEF</span><strong>${finalStats.defense}</strong></div>
+        <div class="stat-line stat-pm"><span>PM</span><strong>${finalStats.magicPower}</strong></div>
       </div>
     </div>
   `;
@@ -933,7 +1778,7 @@ function formatItemTitle(item) {
   const rawName = String(item.name || "").replace(/\s+niv\.\d+$/i, "");
   const safeName = escapeHtml(rawName);
 
-  if (item.type === "resource") {
+  if (item.type === "resource" || item.type === "consumable") {
     return `${item.emoji} ${safeName}`;
   }
 
@@ -1021,6 +1866,46 @@ function handleClick(event) {
 
   if (action === "visit-place") {
     visitPlace(target.dataset.place);
+  }
+
+  if (action === "close-popup") {
+    closePopup();
+  }
+
+  if (action === "merchant-mode") {
+    setMerchantMode(target.dataset.mode);
+  }
+
+  if (action === "merchant-buy") {
+    buyAtMerchant(target.dataset.itemId);
+  }
+
+  if (action === "merchant-sell") {
+    sellAtMerchant(target.dataset.itemId);
+  }
+
+  if (action === "merchant-close-message") {
+    closeMerchantMessage();
+  }
+
+  if (action === "tavern-rest") {
+    restAtTavern();
+  }
+
+  if (action === "tavern-cancel-rest") {
+    cancelTavernRest();
+  }
+
+  if (action === "tavern-close-message") {
+    closeTavernMessage();
+  }
+
+  if (action === "tavern-drink") {
+    drinkAtTavern();
+  }
+
+  if (action === "tavern-eat") {
+    eatAtTavern();
   }
 
   if (action === "select-equipment") {
